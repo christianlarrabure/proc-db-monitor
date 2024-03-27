@@ -1,9 +1,8 @@
-use std::collections::HashMap;
-
-use sysinfo::{System};
 use dotenvy::dotenv;
-use regex::Regex;
+use sysinfo::System;
 mod byte;
+use sqlx::mysql::MySqlConnectOptions;
+use sqlx::prelude::*;
 
 pub struct ProcessInfo {
     pub working_directory: String,
@@ -26,33 +25,32 @@ impl ProcessInfo {
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     dotenv().expect("Failed to read .env file");
-    let PROCESS_REGEX = std::env::var("PROCESS_REGEX").expect("PROCESS_REGEX must be set");
-    let process_regex = Regex::new(&PROCESS_REGEX).expect("Invalid regex in PROCESS_REGEX");
     let mut sys = System::new_all();
     sys.refresh_all();
     let ram_used = byte::Byte::new(sys.used_memory());
     let total_ram = byte::Byte::new(sys.total_memory());
     println!("** Proc DB Monitor Log **");
+    let current_date = chrono::Local::now();
+    println!("Date: {}", current_date);
     println!("RAM: {} / {} bytes", ram_used, total_ram);
-    let mut processes: HashMap<String, ProcessInfo> = HashMap::new();
-    for (pid, process) in sys.processes() {
-        let  cwd = process.cwd();
-        if cwd.is_none() {
-            continue;
-        }
-        let cwd = cwd.unwrap();
-        // match cwd against a regex
-        if !process_regex.is_match(cwd.to_str().unwrap()) {
-            continue;
-        }
-        let working_directory = cwd.to_str().unwrap().to_string();
-        let ram = byte::Byte::new(process.memory());
-        let pid = process.pid().as_u32();
-        processes.entry(working_directory.clone()).or_insert(ProcessInfo::new(working_directory, vec![], byte::Byte::new(0))).add(pid, ram);
-    }
-    for (working_directory, process_info) in processes {
-        println!("{}: {} pids, {} RAM", working_directory, process_info.pids.len(), process_info.ram);
-    }
+
+    let conn_options = MySqlConnectOptions::new()
+        .host(std::env::var("DB_HOST").unwrap().as_str())
+        .port(std::env::var("DB_PORT").unwrap().parse::<u16>().unwrap())
+        .username(std::env::var("DB_USER").unwrap().as_str())
+        .password(std::env::var("DB_PASS").unwrap().as_str())
+        .database(std::env::var("DB_NAME").unwrap().as_str());
+    let mut conn = sqlx::MySqlConnection::connect_with(&conn_options)
+        .await
+        .expect("Failed to connect to database");
+    let row: (String, String) =
+        sqlx::query_as("SHOW STATUS WHERE `variable_name` = 'Threads_connected'")
+            .fetch_one(&mut conn)
+            .await
+            .expect("Failed to fetch row");
+    let threads = row.1.parse::<u32>().expect("Failed to parse threads value");
+    println!("Threads connected: {}", threads);
 }

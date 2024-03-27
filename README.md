@@ -1,9 +1,5 @@
-This utility will print you the amount of RAM being used in your system in total, as well as sum all the RAM used by processes that match a working path defined in the .env.
+This utility will print you the amount of RAM being used in your system in total and also connects to a database of your choosing and tells you the amount of connected threadas.
 
-For example, if your env is:
+Check .env.example for information on how to set it up.
 
-```
-PROCESS_REGEX=multitest.*
-```
-
-It will match files in /home/christianlarrabure/develop/multitest-resources/ or anywhere that has that word.
+This tool is useful for cheap, quick diagnostics (i.e. when doing a migration and need to quickly gauge usage in systems that do not have monitoring tools).
